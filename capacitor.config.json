@@ -1,0 +1,6 @@
+{
+  "appId": "com.example.gardenguard",
+  "appName": "Garden Guard",
+  "webDir": "www",
+  "android": { "backgroundColor": "#141a12" }
+}

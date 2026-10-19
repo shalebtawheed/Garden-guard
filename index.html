@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Garden Guard</title>
+<style>
+:root{--bg:#e8efe0;--panel:#f6f9f1;--ink:#1d2a17;--mute:#55654d;--line:#b9c9ad;--acc:#f2b705;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141a12;--panel:#1f281c;--ink:#e9f0e2;--mute:#9db08f;--line:#36452f}}
+:root[data-theme="dark"]{--bg:#141a12;--panel:#1f281c;--ink:#e9f0e2;--mute:#9db08f;--line:#36452f}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:500 18px/1.3 'Barlow Condensed','Arial Narrow',system-ui,sans-serif;touch-action:manipulation;user-select:none;overflow:hidden}
+#app{max-width:600px;height:100%;margin:0 auto;padding:10px 10px 12px;display:flex;flex-direction:column;gap:8px;position:relative}
+#hud{display:flex;justify-content:space-between;font-size:22px;font-weight:700}
+#seeds{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.seed{flex:1 0 62px;border:0;border-radius:8px;padding:5px 2px 4px;font:inherit;color:var(--ink);background:linear-gradient(to top,rgba(0,0,0,.4) var(--cd,0%),var(--panel) var(--cd,0%));box-shadow:0 0 0 2px var(--line);cursor:pointer;display:flex;flex-direction:column;align-items:center;line-height:1.05}
+.seed span{font-size:24px}.seed small{font-size:12px;color:var(--mute);white-space:nowrap}
+.seed.sel{box-shadow:0 0 0 3px var(--acc)}.seed.poor{opacity:.5}
+.seed:focus-visible,.btn:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+#cv{width:100%;aspect-ratio:540/300;border-radius:8px;display:block;touch-action:none;background:#6bb34a}
+#tip{color:var(--mute);font-size:16px;text-align:center}
+#pz{border:0;border-radius:8px;background:var(--panel);color:var(--ink);font-size:20px;padding:2px 8px;box-shadow:0 0 0 2px var(--line);cursor:pointer}
+.mt{display:flex;flex-direction:column;align-items:center;gap:8px}
+.bub{position:relative;background:var(--panel);border-radius:14px;padding:12px 14px;box-shadow:0 0 0 2px var(--line);width:100%;min-height:170px;text-align:left}
+.bub::before{content:'';position:absolute;top:-10px;left:50%;margin-left:-10px;border:10px solid transparent;border-top:0;border-bottom-color:var(--line)}
+.bub small{display:block;color:var(--mute);margin-bottom:6px;font-size:15px}
+#ov .bub p{color:var(--ink);font-size:23px;line-height:1.3;text-align:left}
+.nav{display:flex;gap:10px}.nav .btn{flex:1}
+.btn.alt{background:var(--panel);color:var(--ink);box-shadow:0 0 0 2px var(--line)}
+.btn:disabled{opacity:.4;cursor:default}
+.lnk{background:none;border:0;color:var(--mute);font:inherit;text-decoration:underline;cursor:pointer}
+.mh{transform-origin:60px 105px;animation:wob 1.6s ease-in-out infinite}
+@keyframes wob{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(6deg)}}
+.pu{transform-box:fill-box;transform-origin:center;animation:rl 1.1s linear infinite}.pu2{animation-duration:.75s;animation-direction:reverse}
+@keyframes rl{0%{transform:translate(-3px,0)}25%{transform:translate(0,-3px)}50%{transform:translate(3px,0)}75%{transform:translate(0,3px)}100%{transform:translate(-3px,0)}}
+.tg{transform-box:fill-box;transform-origin:top;animation:tg .35s ease-in-out infinite alternate}
+@keyframes tg{to{transform:scaleY(1.35)}}
+@media (prefers-reduced-motion:reduce){.mh,.pu,.tg{animation:none}}
+#ov{position:absolute;inset:0;background:var(--bg);display:none;flex-direction:column;justify-content:center;gap:14px;padding:24px;text-align:center;z-index:5}
+#ov.on{display:flex}
+#ov h1{margin:0;font-size:44px;line-height:1}#ov p{margin:0;color:var(--mute)}
+.btn{border:0;border-radius:8px;background:var(--acc);color:#1d2a17;font:700 24px 'Barlow Condensed',sans-serif;padding:14px;cursor:pointer}
+</style></head>
+<body>
+<div id="app">
+  <div id="hud"><span>Level <b id="lv">1</b></span><span>☀️ <b id="sun">0</b></span><button id="pz" aria-label="Pause">⏸</button><button id="mute" aria-label="Toggle sound" style="border:0;border-radius:8px;background:var(--panel);color:var(--ink);font-size:20px;padding:2px 8px;box-shadow:0 0 0 2px var(--line);cursor:pointer">🔊</button><span><b id="left">0</b> pests left</span></div>
+  <div id="seeds"></div>
+  <canvas id="cv" width="540" height="300"></canvas>
+  <div id="tip">Tap falling suns to collect them. Pick a seed, then tap a lawn square.</div>
+  <div id="ov" class="on"></div>
+</div>
+<script>
+const W=540,H=300,C=60,$=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d');
+const P={sun:{e:'🌻',cost:50,hp:60,cd:5,n:'Sunbloom'},shoot:{e:'🌱',cost:100,hp:60,cd:5,n:'Seed Shooter'},wall:{e:'🪵',cost:50,hp:360,cd:15,n:'Bark Wall'},chili:{e:'🌶️',cost:150,hp:1,cd:25,n:'Chili Blast'},frost:{e:'❄️',cost:150,hp:60,cd:7,n:'Frost Bud'},twin:{e:'🌿',cost:200,hp:60,cd:7,n:'Twin Pod'},thorn:{e:'🌵',cost:75,hp:140,cd:10,n:'Thorn Cactus'}};
+const Z={bug:{e:'🐛',hp:8,sp:9,d:10},tank:{e:'🪲',hp:22,sp:8,d:14},fast:{e:'🐜',hp:5,sp:20,d:8},snail:{e:'🐌',hp:45,sp:5,d:12},cricket:{e:'🦗',hp:14,sp:11,d:9,jump:1},boss:{e:'🦂',hp:160,sp:6,d:30,big:1}};
+let level=1;try{level=+localStorage.getItem('gg_level')||1}catch(e){}
+let g=null,last=0,sel='shoot',shovel=false;
+const SH={shoot:1.4,frost:1.7,twin:1.4};
+let AC=null,mute=false;const lastS={};
+function snd(k){
+ if(mute||!AC)return;const n=AC.currentTime;if(n-(lastS[k]||0)<(k==='bite'?.4:.06))return;lastS[k]=n;
+ const S={sun:[880,.09,'sine',1320],plant:[140,.12,'triangle',70],shoot:[520,.06,'square',320],frost:[900,.1,'sine',500],hit:[200,.04,'square',120],bite:[90,.08,'sawtooth',70],die:[300,.22,'sawtooth',60],boom:[110,.5,'sawtooth',30],win:[330,.6,'triangle',990],lose:[220,.7,'sawtooth',55],dig:[260,.08,'triangle',160],nope:[120,.1,'square',90]}[k];
+ const o=AC.createOscillator(),v=AC.createGain();o.type=S[2];o.frequency.setValueAtTime(S[0],n);o.frequency.exponentialRampToValueAtTime(S[3],n+S[1]);
+ v.gain.setValueAtTime(.12,n);v.gain.exponentialRampToValueAtTime(.001,n+S[1]);o.connect(v);v.connect(AC.destination);o.start(n);o.stop(n+S[1]+.02);
+}
+function initAudio(){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==='suspended')AC.resume()}catch(e){}}
+addEventListener('pointerdown',initAudio);
+document.getElementById('mute').onclick=e=>{mute=!mute;e.target.textContent=mute?'🔇':'🔊'};
+function spr(e,x,y,s,rot,sx,sy){ctx.save();ctx.translate(x,y);ctx.rotate(rot||0);ctx.scale(sx||1,sy||1);ctx.font=s+'px system-ui';ctx.fillText(e,0,0);ctx.restore()}
+function puff(x,y,c,n){for(let i=0;i<n;i++){const a=Math.random()*6.28,v=40+Math.random()*90;g.pt.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-30,t:.5,c})}}
+function pop(x,y,s,c){g.tx.push({x,y,s,t:.9,c})}
+
+$('seeds').innerHTML=Object.keys(P).map(k=>`<button class="seed" data-k="${k}"><span>${P[k].e}</span><small>${P[k].n} ${P[k].cost}</small></button>`).join('')+`<button class="seed" data-k="dig"><span>⛏️</span><small>Dig up</small></button>`;
+document.querySelectorAll('.seed').forEach(b=>b.onclick=()=>{const k=b.dataset.k;shovel=k==='dig';sel=shovel?null:k});
+
+function overlay(t,p,b,f){$('ov').innerHTML=`<h1>${t}</h1><p>${p}</p><button class="btn" id="ob">${b}</button>`;$('ov').classList.add('on');$('ob').onclick=f}
+
+function newGame(){
+  const sched=[],n=6+level*3;let t=14;
+  for(let i=0;i<n;i++){
+    t+=Math.max(2.5,7-level*.35)*(.6+Math.random()*.8)*(i>=n-5?.45:1);
+    const r=Math.random();
+    const k=level>2&&r<.12?'cricket':level>3&&r<.25?'snail':level>3&&r<.4?'fast':level>1&&r<.65?'tank':'bug';sched.push({t,r:Math.floor(Math.random()*5),k});
+  }
+  if(level%3===0)sched.push({t:t+4,r:2,k:'boss'});g={pt:[],tx:[],shake:0,sun:150,pl:Array.from({length:5},()=>Array(9).fill(null)),z:[],pea:[],su:[],fx:[],mw:Array.from({length:5},()=>({x:0,on:false,used:false})),
+     t:0,sky:4,sched,idx:0,cd:{},over:false,note:0};
+  $('ov').classList.remove('on');
+}
+
+function lose(){g.over=true;snd('lose');overlay('The pests got in','They reached your house. Try the level again.','Retry level '+level,newGame)}
+function win(){g.over=true;snd('win');level++;try{localStorage.setItem('gg_level',level)}catch(e){}overlay('Garden defended!','Every pest is gone. The next level brings more and tougher ones.','Start level '+level,newGame)}
+
+function boom(r,c){
+  const cx=c*C+30;
+  g.z.forEach(z=>{if(Math.abs(z.r-r)<=1&&Math.abs(z.x-cx)<=95)z.hp-=100});
+  g.fx.push({x:cx,y:r*C+30,t:.35});g.pl[r][c]=null;puff(cx,r*C+30,'#ff9800',24);g.shake=.3;snd('boom');
+}
+
+function upd(dt){
+  g.t+=dt;
+  g.sky-=dt;if(g.sky<=0){g.sky=8;g.su.push({x:30+Math.random()*(W-60),y:-20,ty:60+Math.random()*(H-90),age:0})}
+  g.su.forEach(s=>{if(s.y<s.ty)s.y+=45*dt;s.age+=dt});g.su=g.su.filter(s=>s.age<12);
+  for(let r=0;r<5;r++)for(let c=0;c<9;c++){
+    const p=g.pl[r][c];if(!p)continue;p.t+=dt;if(p.rc>0)p.rc-=dt;if(p.pp>0)p.pp-=dt;
+    if(p.k==='sun'&&p.t>=8){p.t=0;g.su.push({x:c*C+30,y:r*C+30,ty:r*C+34,age:2})}
+    else if(SH[p.k]&&p.t>=SH[p.k]&&g.z.some(z=>z.r===r&&z.x>c*C+30)){p.t=0;p.rc=.15;g.pea.push({x:c*C+45,r,f:p.k==='frost'});if(p.k==='twin')g.pea.push({x:c*C+25,r});snd(p.k==='frost'?'frost':'shoot')}
+    else if(p.k==='chili'&&p.t>=.6)boom(r,c);
+  }
+  g.pea.forEach(q=>{q.x+=240*dt;const h=g.z.find(z=>z.r===q.r&&Math.abs(z.x-q.x)<14);if(h){h.hp-=2;h.hit=.12;if(q.f)h.slow=3;q.dead=1;snd('hit');puff(q.x,q.r*C+22,q.f?'#9be7ff':'#7ed957',3)}if(q.x>W+10)q.dead=1});
+  g.pea=g.pea.filter(q=>!q.dead);
+  while(g.idx<g.sched.length&&g.t>=g.sched[g.idx].t){
+    const s=g.sched[g.idx++],d=Z[s.k],m=1+level*.08;
+    g.z.push({r:s.r,x:W+10,hp:d.hp*m,max:d.hp*m,sp:d.sp,d:d.d,e:d.e,jump:d.jump,big:d.big,slow:0,hit:0,eat:0,ph:Math.random()*6});if(d.big){g.shake=.5;snd('boom')}
+    if(g.idx===g.sched.length-4)g.note=3;
+  }
+  for(const z of g.z){
+    const col=Math.floor(z.x/C),p=col>=0&&col<9?g.pl[z.r][col]:null;
+    z.hit=Math.max(0,z.hit-dt);z.slow=Math.max(0,z.slow-dt);
+    if(p&&z.x<col*C+54){
+      if(z.jump&&!z.jumped){z.jumped=1;z.x=col*C-8;puff(z.x,z.r*C+40,'#cfe8a0',5)}
+      else{z.eat=1;p.hp-=z.d*dt;if(p.k==='thorn'){z.hp-=6*dt;z.hit=.1}snd('bite');if(p.hp<=0){g.pl[z.r][col]=null;puff(col*C+30,z.r*C+30,'#8d6e63',10);snd('die')}}
+    }else{z.eat=0;z.x-=z.sp*(z.slow>0?.45:1)*dt}
+    if(z.x<6){const m=g.mw[z.r];if(!m.used)m.used=m.on=true;else return lose()}
+  }
+  g.mw.forEach((m,r)=>{if(!m.on)return;m.x+=320*dt;g.z.forEach(z=>{if(z.r===r&&z.x<m.x+24)z.hp=0});if(m.x>W+30)m.on=false});
+  g.z.forEach(z=>{if(z.hp<=0){puff(z.x,z.r*C+30,z.big?'#ff8a65':'#a5d6a7',z.big?30:8);snd('die');if(z.big){g.shake=.4;snd('boom')}}});g.z=g.z.filter(z=>z.hp>0);
+  g.fx.forEach(f=>f.t-=dt);g.fx=g.fx.filter(f=>f.t>0);
+  g.pt.forEach(q=>{q.x+=q.vx*dt;q.y+=q.vy*dt;q.vy+=200*dt;q.t-=dt});g.pt=g.pt.filter(q=>q.t>0);
+  g.tx.forEach(q=>{q.y-=30*dt;q.t-=dt});g.tx=g.tx.filter(q=>q.t>0);if(g.shake>0)g.shake-=dt;
+  if(g.note>0)g.note-=dt;
+  if(g.idx>=g.sched.length&&!g.z.length)win();
+}
+
+function draw(){ctx.save();if(g.shake>0)ctx.translate((Math.random()-.5)*8,(Math.random()-.5)*8);
+  for(let r=0;r<5;r++)for(let c=0;c<9;c++){ctx.fillStyle=(r+c)%2?'#7cc35a':'#6bb34a';ctx.fillRect(c*C,r*C,C,C)}
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  g.mw.forEach((m,r)=>{if(m.used&&!m.on)return;ctx.font='24px system-ui';ctx.fillText('🚜',m.on?m.x:14,r*C+34)});
+  for(let r=0;r<5;r++)for(let c=0;c<9;c++){
+    const p=g.pl[r][c];if(!p)continue;const bob=Math.sin(g.t*3+c+r),pp=p.pp>0?1+p.pp*1.2:1,rc=p.rc>0?p.rc*2:0;spr(P[p.k].e,c*C+30-rc*10,r*C+34+bob*1.5,38,p.k==='sun'?bob*.1:0,pp*(1+bob*.02),pp*(p.k==='chili'?1+Math.sin(g.t*20)*.1:1-bob*.02));
+    if(p.hp<P[p.k].hp){ctx.fillStyle='#0006';ctx.fillRect(c*C+8,r*C+54,44,4);ctx.fillStyle='#4caf50';ctx.fillRect(c*C+8,r*C+54,44*p.hp/P[p.k].hp,4)}
+  }
+  g.z.forEach(z=>{const w=Math.sin(g.t*(z.eat?14:7)+z.ph);ctx.globalAlpha=z.hit>0?.55:1;spr(z.e,z.x+(z.eat?w*2:0),z.r*C+34-Math.abs(w)*3,z.big?54:34,w*.12,z.hit>0?1.15:1,z.hit>0?.9:1);ctx.globalAlpha=1;if(z.slow>0){ctx.fillStyle='#4fc3f7';ctx.fillRect(z.x-16,z.r*C+9,32,3)}ctx.fillStyle='#0006';ctx.fillRect(z.x-16,z.r*C+4,32,4);ctx.fillStyle='#e53935';ctx.fillRect(z.x-16,z.r*C+4,32*z.hp/z.max,4)});
+  g.pea.forEach(q=>{ctx.fillStyle=q.f?'#80deea':'#2f8f2f';ctx.beginPath();ctx.arc(q.x,q.r*C+22,5,0,7);ctx.fill();ctx.globalAlpha=.3;ctx.beginPath();ctx.arc(q.x-8,q.r*C+22,3.5,0,7);ctx.fill();ctx.globalAlpha=1});g.pt.forEach(q=>{ctx.globalAlpha=Math.max(0,q.t*2);ctx.fillStyle=q.c;ctx.fillRect(q.x-2,q.y-2,4,4)});ctx.globalAlpha=1;g.tx.forEach(q=>{ctx.globalAlpha=Math.min(1,q.t*2);ctx.font='700 22px Barlow Condensed,sans-serif';ctx.fillStyle=q.c;ctx.fillText(q.s,q.x,q.y)});ctx.globalAlpha=1;
+  g.fx.forEach(f=>{ctx.fillStyle=`rgba(255,120,0,${f.t*2})`;ctx.beginPath();ctx.arc(f.x,f.y,f.t*300,0,7);ctx.fill()});
+  g.su.forEach(s=>{ctx.font=`${34+Math.sin(g.t*5)*2}px system-ui`;ctx.fillText('☀️',s.x,s.y)});
+  if(g.note>0){ctx.font='700 34px Barlow Condensed,sans-serif';ctx.fillStyle='#fff';ctx.strokeStyle='#b71c1c';ctx.lineWidth=5;ctx.strokeText('Final wave!',W/2,H/2);ctx.fillText('Final wave!',W/2,H/2)}ctx.restore();
+}
+
+function ui(){
+  $('lv').textContent=level;$('sun').textContent=Math.floor(g.sun);
+  $('left').textContent=g.z.length+g.sched.length-g.idx;
+  document.querySelectorAll('.seed').forEach(b=>{
+    const k=b.dataset.k;b.classList.toggle('sel',k==='dig'?shovel:k===sel);
+    if(k==='dig')return;
+    const cd=g.cd[k]||0;b.style.setProperty('--cd',Math.max(0,cd/P[k].cd*100)+'%');
+    b.classList.toggle('poor',g.sun<P[k].cost);
+  });
+}
+
+function loop(ts){
+  const dt=Math.min(.05,(ts-(last||ts))/1000);last=ts;
+  if(g){
+    if(!g.over&&!paused){for(const k in g.cd)g.cd[k]=Math.max(0,g.cd[k]-dt);upd(dt)}
+    if(g){draw();ui()}
+  }
+  requestAnimationFrame(loop);
+}
+
+cv.addEventListener('pointerdown',e=>{
+  if(!g||g.over||paused)return;
+  const b=cv.getBoundingClientRect(),x=(e.clientX-b.left)*W/b.width,y=(e.clientY-b.top)*H/b.height;
+  const i=g.su.findIndex(s=>Math.hypot(s.x-x,s.y-y)<34);
+  if(i>=0){const s=g.su.splice(i,1)[0];g.sun+=25;snd('sun');pop(s.x,s.y,'+25','#fff59d');return}
+  const c=Math.floor(x/C),r=Math.floor(y/C);if(c<0||c>8||r<0||r>4)return;
+  if(shovel){if(g.pl[r][c]){puff(c*C+30,r*C+30,'#a1887f',8);snd('dig')}g.pl[r][c]=null;return}
+  if(!sel||g.pl[r][c])return;
+  const d=P[sel];if(g.sun<d.cost||(g.cd[sel]||0)>0){snd('nope');return}
+  g.sun-=d.cost;g.cd[sel]=d.cd;g.pl[r][c]={k:sel,hp:d.hp,t:0,pp:.3};snd('plant');puff(c*C+30,r*C+50,'#a1887f',6);
+});
+
+const MINTU=`<svg viewBox="0 0 120 130" width="120" height="130" aria-hidden="true"><path d="M22 50 L10 22 L34 36 L40 6 L54 32 L66 2 L74 32 L92 8 L92 38 L112 26 L98 56Z" fill="#1a1a1a"/><g class="mh"><ellipse cx="60" cy="66" rx="40" ry="40" fill="#e3a574"/><circle cx="44" cy="56" r="15" fill="#fff" stroke="#222" stroke-width="2"/><circle cx="78" cy="59" r="11" fill="#fff" stroke="#222" stroke-width="2"/><circle class="pu" cx="44" cy="56" r="6" fill="#222"/><circle class="pu pu2" cx="78" cy="59" r="4.5" fill="#222"/><path d="M28 42 Q44 30 56 44" stroke="#222" stroke-width="3" fill="none"/><path d="M68 48 Q80 40 92 50" stroke="#222" stroke-width="3" fill="none"/><path d="M32 82 Q60 112 90 80 Q60 90 32 82Z" fill="#7a1f1f" stroke="#222" stroke-width="2"/><path class="tg" d="M58 92 Q62 108 72 94Z" fill="#ff6f91"/></g><path d="M26 130 Q60 104 96 130Z" fill="#f2b705"/></svg>`;
+const PG=[
+['The story',`Namaste, namaste! I am Mintu Paglu, head gardener of the Great Garden. Yes, I am a little bit mad. The tomatoes say it is a good thing!`],
+['The story',`One night I dreamed my chai was talking. It said, “Mintu, bugs are coming.” I said, “Chai, you are cold.” It said, “Exactly.”`],
+['The story',`Next morning the whole lawn was shaking! Beetles, ants and snails marching in, hungry like a Monday morning.`],
+['The story',`Their boss is a giant scorpion with very bad manners. It eats walls. It eats pots. Once it ate my left sandal.`],
+['The story',`So I gave my sunflowers a job and taught my seeds to shoot. Now YOU are the new head gardener. Don’t worry, I will explain everything!`],
+['How to play',`Step 1. Pests crawl in from the right, along five lanes. Stop them before they reach the left side, my friend.`],
+['How to play',`Step 2. Tap the falling suns ☀️ to collect them. Each one is worth 25. Sunblooms 🌻 make extra suns for you.`],
+['How to play',`Step 3. Pick a seed from the bar, then tap a lawn square to plant it. The number is the cost. A dark fill means the seed is still recharging.`],
+['How to play',`Step 4. Shooters: Seed Shooter 🌱, Twin Pod 🌿 and Frost Bud ❄️, which slows pests. Blockers: Bark Wall 🪵 and Thorn Cactus 🌵, which bites back. Chili Blast 🌶️ explodes once, 3×3.`],
+['How to play',`Step 5. Every lane has one lawn mower 🚜. It wipes out the lane the first time a pest gets through. The second time, you lose. Gulp!`],
+['How to play',`Step 6. ⛏️ digs up a plant. ⏸ pauses the game and brings me back. 🔊 mutes my shouting.`],
+['How to play',`Step 7. Watch for the Final wave! Every third level a scorpion boss shows up. Clear every pest to win. Now go, go, GO!`]
+];
+let pgI=0,pgDone=null,tw=0,paused=false;
+function story(done){pgI=0;pgDone=done;pg()}
+function pg(){
+ const [sec,tx]=PG[pgI],last=pgI===PG.length-1;
+ $('ov').innerHTML=`<div class="mt">${MINTU}<div class="bub"><small>${sec}, page ${pgI+1} of ${PG.length}</small><p id="bt"></p></div></div><div class="nav"><button class="btn alt" id="pb" ${pgI?'':'disabled'}>Back</button><button class="btn" id="pn">${last?pgDone.label:'Next'}</button></div><button class="lnk" id="ps">Skip to the game</button>`;
+ $('ov').classList.add('on');
+ clearInterval(tw);let i=0;const el=$('bt');
+ tw=setInterval(()=>{el.textContent=tx.slice(0,++i);if(i>=tx.length){clearInterval(tw);tw=0}},22);
+ $('pb').onclick=()=>{clearInterval(tw);tw=0;pgI--;pg()};
+ $('pn').onclick=()=>{snd('plant');if(tw){clearInterval(tw);tw=0;el.textContent=tx;return}last?pgDone.fn():(pgI++,pg())};
+ $('ps').onclick=()=>{clearInterval(tw);tw=0;pgDone.fn()};
+}
+function setPause(on){
+ if(!g||g.over)return;paused=on;$('pz').textContent=on?'▶️':'⏸';
+ if(on){
+  $('ov').innerHTML=`<h1>Paused</h1><p>The pests are frozen. Mintu is still mad.</p><button class="btn" id="r1">Resume</button><button class="btn alt" id="r2">Mintu’s story and how to play</button>`;
+  $('ov').classList.add('on');$('r1').onclick=()=>setPause(false);
+  $('r2').onclick=()=>story({label:'Back to the garden',fn:()=>setPause(false)});
+ }else $('ov').classList.remove('on');
+}
+$('pz').onclick=()=>setPause(!paused);
+addEventListener('keydown',e=>{if(e.key==='p')setPause(!paused)});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)setPause(true)});
+story({label:'Start level '+level,fn:newGame});
+requestAnimationFrame(loop);
+</script>
+</body></html>
